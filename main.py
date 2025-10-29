@@ -25,6 +25,7 @@ app.config["SESSION_COOKIE_SECURE"] = True  # HTTPS에서만 쿠키 전송
 app.config["SESSION_COOKIE_HTTPONLY"] = True  # JavaScript 접근 차단
 app.config["SESSION_COOKIE_SAMESITE"] = "None"  # CORS 환경에서 작동
 app.config["PERMANENT_SESSION_LIFETIME"] = 3600  # 1시간
+app.config["JSON_AS_ASCII"] = False  # 한글이 제대로 표시되도록 설정
 
 # OpenAI API 키 환경 변수에서 불러오기
 openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -171,6 +172,13 @@ def format_gpt_response(response):
 @app.route('/')  # 웹 애플리케이션의 루트 경로
 def index():  # index.html 파일을 반환
     return send_from_directory(".", "index.html")  # 현재 디렉토리에서 index.html 파일 제공
+
+
+# 파일 목록 뷰어 페이지
+@app.route('/files')
+def files_page():
+    """파일 목록을 보여주는 예쁜 웹 페이지"""
+    return send_from_directory(".", "files.html")
 
 
 # 설문 초기화 API
