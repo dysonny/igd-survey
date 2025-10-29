@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory, session
+from flask import Flask, request, jsonify, send_from_directory, session, Response
 from flask_cors import CORS
 import openai
 import os
@@ -428,7 +428,13 @@ def download_file(filepath):
         with open(safe_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
-        return jsonify(data)
+        # JSON을 예쁘게 포맷팅해서 반환
+        formatted_json = json.dumps(data, ensure_ascii=False, indent=2)
+        return Response(
+            formatted_json,
+            mimetype='application/json; charset=utf-8',
+            headers={'Content-Type': 'application/json; charset=utf-8'}
+        )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
