@@ -198,6 +198,9 @@ def chat():  # 사용자 입력을 처리하고 적절한 응답 반환
     user_input = data.get("user_input", "").strip()  # 사용자 입력 문자열 가져오기
     input_time = datetime.now(pytz.utc).astimezone(KST).strftime(
         '%Y-%m-%d %H:%M:%S')  # 입력 시간 기록
+    
+    # 디버깅: 입력값과 현재 상태 출력
+    print(f"🔍 [DEBUG] 입력: '{user_input}', 현재 index: {survey_status['current_question_index']}, 답변 수: {len(survey_status['answers'])}")
 
     # 설문 진행 중인 경우
     if 0 <= survey_status["current_question_index"] < len(QUESTIONS):
@@ -205,10 +208,14 @@ def chat():  # 사용자 입력을 처리하고 적절한 응답 반환
             # 현재 질문에 대한 답변 저장
             survey_status["answers"].append(user_input)
             current_index = survey_status["current_question_index"]
+            
+            print(f"✅ [DEBUG] 답변 저장: '{user_input}', current_index: {current_index}")
 
             if current_index + 1 < len(QUESTIONS):  # 다음 질문이 있는 경우
                 question = QUESTIONS[current_index + 1]  # 다음 질문 가져오기
                 survey_status["current_question_index"] += 1  # 인덱스 증가
+                
+                print(f"➡️  [DEBUG] 다음 질문으로 이동: index {current_index} → {survey_status['current_question_index']}, 질문: {question[:30]}...")
 
                 if current_index + 1 < 9:  # 1~9번 질문
                     button_texts = [
