@@ -1,6 +1,5 @@
 from flask import Flask, request, jsonify, send_from_directory, session
 from flask_cors import CORS
-from flask_session import Session  # Flask-Session 임포트
 import openai
 import os
 import json
@@ -17,13 +16,15 @@ load_dotenv()
 KST = pytz.timezone('Asia/Seoul')
 app = Flask(__name__, static_folder=".", static_url_path="")
 
-# CORS 설정
-CORS(app, supports_credentials=True)
+# CORS 설정 - credentials 지원
+CORS(app, supports_credentials=True, origins=["*"])
 
-# Flask-Session 설정
-app.config["SESSION_TYPE"] = "filesystem"  # 세션을 파일 시스템에 저장
-app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "super-secret-key-for-dev")
-Session(app)
+# Flask 기본 세션 설정 (서명된 쿠키 사용)
+app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "super-secret-key-for-dev-change-in-production")
+app.config["SESSION_COOKIE_SECURE"] = True  # HTTPS에서만 쿠키 전송
+app.config["SESSION_COOKIE_HTTPONLY"] = True  # JavaScript 접근 차단
+app.config["SESSION_COOKIE_SAMESITE"] = "None"  # CORS 환경에서 작동
+app.config["PERMANENT_SESSION_LIFETIME"] = 3600  # 1시간
 
 # OpenAI API 키 환경 변수에서 불러오기
 openai.api_key = os.getenv("OPENAI_API_KEY")
