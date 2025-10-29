@@ -371,6 +371,82 @@ def chat():  # 사용자 입력을 처리하고 적절한 응답 반환
 def get_history():  # 대화 기록 반환
     session_data = get_survey_status()
     return jsonify(session_data["chat_history"])  # JSON 형태로 대화 기록 반환
+
+
+# 저장된 파일 목록 조회 API
+@app.route('/api/files', methods=['GET'])
+def list_files():
+    """저장된 모든 JSON 파일 목록 반환"""
+    try:
+        files_info = []
+        userinfo_path = "userinfo"
+        
+        if not os.path.exists(userinfo_path):
+            return jsonify({"message": "No files saved yet.", "files": []})
+        
+        # 날짜 폴더 순회
+        for date_folder in sorted(os.listdir(userinfo_path), reverse=True):
+            date_path = os.path.join(userinfo_path, date_folder)
+            if os.path.isdir(date_path):
+                # 각 날짜 폴더 내 파일 조회
+                for filename in os.listdir(date_path):
+                    if filename.endswith('.json'):
+                        file_path = os.path.join(date_path, filename)
+                        file_stat = os.stat(file_path)
+                        files_info.append({
+                            "date": date_folder,
+                            "filename": filename,
+                            "path": f"{date_folder}/{filename}",
+                            "size": file_stat.st_size,
+                            "modified": datetime.fromtimestamp(file_stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')
+                        })
+        
+        return jsonify({
+            "total": len(files_info),
+            "files": files_info
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# 특정 파일 다운로드 API
+@app.route('/api/download/<path:filepath>', methods=['GET'])
+def download_file(filepath):
+    """특정 JSON 파일 다운로드"""
+    try:
+        file_path = os.path.join("userinfo", filepath)
+        if not os.path.exists(file_path):
+            return jsonify({"error": "File not found"}), 404
+        
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# 특정 날짜의 파일 목록 조회 API
+@app.route('/api/files/<date>', methods=['GET'])
+def list_files_by_date(date):
+    """특정 날짜의 파일 목록 반환"""
+    try:
+        date_path = os.path.join("userinfo", date)
+        if not os.path.exists(date_path):
+            return jsonify({"message": f"No files found for {date}", "files": []})
+        
+        files = []
+        for filename in os.listdir(date_path):
+            if filename.endswith('.json'):
+                files.append(filename)
+        
+        return jsonify({
+            "date": date,
+            "total": len(files),
+            "files": files
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 # 애플리케이션 실행
 if __name__ == '__main__':  # 스크립트가 직접 실행될 때
     # 환경 변수에서 포트 번호 가져오기 (기본값: 5000)
