@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory  # Flask 웹 프레임워크 및 관련 모듈 가져오기
+from flask import Flask, request, jsonify, send_from_directory, session  # Flask 웹 프레임워크 및 관련 모듈 가져오기
 from flask_cors import CORS  # CORS 지원을 위한 라이브러리
 import openai  # OpenAI API 사용을 위한 라이브러리
 import os  # 환경 변수와 파일 경로 관리를 위한 모듈
@@ -17,8 +17,11 @@ KST = pytz.timezone('Asia/Seoul')
 app = Flask(__name__, static_folder=".",
             static_url_path="")  # 현재 디렉토리에서 정적 파일 제공
 
-# CORS 설정 - 모든 도메인에서 API 접근 허용
-CORS(app)
+# CORS 설정 - 모든 도메인에서 API 접근 허용 (credentials 지원)
+CORS(app, supports_credentials=True)
+
+# 세션 비밀 키 설정 (보안을 위해 환경 변수 사용)
+app.secret_key = os.getenv("SECRET_KEY", "your-secret-key-change-this-in-production")
 
 # OpenAI API 키 환경 변수에서 불러오기
 openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -60,19 +63,34 @@ QUESTIONS = [
     "28/29: 게임 때문에 나의 주된 일상 활동들(직업, 교육, 가사 등)에 부정적 영향을 받지는 않는다.",
     "29/29: 게임이 내 삶의 중요한 영역들에 부정적 영향을 미친다고 믿는다."
 ]
-# 설문 상태 저장 변수 초기화
-survey_status = {  # 현재 질문 인덱스와 사용자 응답 기록 관리
-    "current_question_index": -2,  # 현재 질문 인덱스 (-2는 초기화 상태)
-    "answers": [],  # 사용자의 답변 저장
-    "user_query_count": 0  # 사용자가 질문한 횟수
-}
-# 사용자 정보 저장 변수
-user_info = {}  # 사용자 이름, 생년월일, 성별 등 정보 저장
-# 대화 기록 저장 변수 초기화
-chat_history = {"user_info": {}, "messages": []}  # 대화 기록 초기화
+
+# 사용자별 데이터를 저장하는 딕셔너리 (세션 ID를 키로 사용)
+user_sessions = {}
 
 
-def save_chat_history(history):
+def get_session_id():
+    """세션 ID 가져오기 또는 생성"""
+    if 'session_id' not in session:
+        import uuid
+        session['session_id'] = str(uuid.uuid4())
+    return session['session_id']
+
+
+def get_survey_status():
+    """현재 세션의 설문 상태 가져오기"""
+    session_id = get_session_id()
+    if session_id not in user_sessions:
+        user_sessions[session_id] = {
+            "current_question_index": -2,
+            "answers": [],
+            "user_query_count": 0,
+            "user_info": {},
+            "chat_history": {"user_info": {}, "messages": []}
+        }
+    return user_sessions[session_id]
+
+
+def save_chat_history(history, user_info):
     # 사용자 이름과 생년월일 기반으로 파일명 생성
     name = user_info.get("name", "unknown").replace(" ",
                                                     "_")  # 사용자 이름 가져오고 공백 제거
@@ -97,10 +115,9 @@ def save_chat_history(history):
 
 
 # 초기화된 대화 기록 생성 함수
-def initialize_chat_history():  # 새로운 대화 기록 생성 및 초기화
-    global chat_history
-    chat_history = {"user_info": user_info, "messages": []}  # 사용자 정보와 메시지 초기화
-    save_chat_history(chat_history)  # 대화 기록 저장
+def initialize_chat_history(session_data):  # 새로운 대화 기록 생성 및 초기화
+    session_data["chat_history"] = {"user_info": session_data["user_info"], "messages": []}  # 사용자 정보와 메시지 초기화
+    save_chat_history(session_data["chat_history"], session_data["user_info"])  # 대화 기록 저장
 
 
 # OpenAI Assistant 응답 메시지 생성 함수
@@ -115,7 +132,7 @@ def get_assistant_message():  # 설문조사 진행 기준 메시지를 반환
 
 
 # 사용자 정보를 기반으로 컨텍스트 생성 함수
-def get_user_context():  # 사용자 이름, 생년월일, 성별 정보를 기반으로 설명 생성
+def get_user_context(user_info):  # 사용자 이름, 생년월일, 성별 정보를 기반으로 설명 생성
 
     name = user_info.get("name", "사용자")  # 사용자 이름 가져오기
     dob = user_info.get("dob", "알 수 없음")  # 사용자 생년월일 가져오기
@@ -125,8 +142,8 @@ def get_user_context():  # 사용자 이름, 생년월일, 성별 정보를 기�
 
 
 # Assistant 지침 메시지 생성 함수
-def get_instruction_message():  # 설문 진행과 GPT 응답 지침 메시지 반환
-    user_context = get_user_context()  # 사용자 정보를 포함한 컨텍스트 생성
+def get_instruction_message(user_info):  # 설문 진행과 GPT 응답 지침 메시지 반환
+    user_context = get_user_context(user_info)  # 사용자 정보를 포함한 컨텍스트 생성
     return f"""
 {user_context}
 
@@ -170,29 +187,32 @@ def index():  # index.html 파일을 반환
 # 설문 초기화 API
 @app.route('/reset', methods=['POST'])  # POST 요청으로 설문 상태 초기화
 def reset_survey():  # 설문 상태와 대화 기록 초기화
-    global survey_status, chat_history  # 전역 변수 사용
-    survey_status = {"current_question_index": -2, "answers": []}  # 초기 상태로 설정
-    chat_history = {"user_info": {}, "messages": []}  # 대화 기록 초기화
+    session_id = get_session_id()
+    if session_id in user_sessions:
+        del user_sessions[session_id]
+    session.clear()
     return jsonify({"message": "설문 상태가 초기화되었습니다."})
 
 
 # 사용자 정보 저장 API
 @app.route('/user-info', methods=['POST'])  # POST 요청으로 사용자 정보 저장
 def save_user_info():  # 사용자 정보 저장 및 초기화된 대화 기록 생성
-    global user_info
+    session_data = get_survey_status()
     user_info = request.json  # 클라이언트로부터 JSON 데이터 가져오기
     if not user_info.get("name") or not user_info.get(
             "dob") or not user_info.get("gender") or not user_info.get(
                 "gameAddictionScore"):
         return jsonify({"message": "모든 필드를 채워주세요."}), 400  # 필드가 부족하면 오류 응답 반환
-    initialize_chat_history()  # 대화 기록 초기화
+    session_data["user_info"] = user_info
+    initialize_chat_history(session_data)  # 대화 기록 초기화
     return jsonify({"message": "User info saved successfully."})  # 성공 메시지 반환
 
 
 # 설문 및 대화 처리 API
 @app.route('/chat', methods=['POST'])  # POST 요청으로 대화 처리
 def chat():  # 사용자 입력을 처리하고 적절한 응답 반환
-    global survey_status  # 설문 상태 전역 변수 사용
+    session_data = get_survey_status()  # 세션별 상태 가져오기
+    survey_status = session_data  # 편의를 위한 alias
 
     data = request.json  # 사용자 입력 데이터 가져오기
     user_input = data.get("user_input", "").strip()  # 사용자 입력 문자열 가져오기
@@ -200,7 +220,7 @@ def chat():  # 사용자 입력을 처리하고 적절한 응답 반환
         '%Y-%m-%d %H:%M:%S')  # 입력 시간 기록
     
     # 디버깅: 입력값과 현재 상태 출력
-    print(f"🔍 [DEBUG] 입력: '{user_input}', 현재 index: {survey_status['current_question_index']}, 답변 수: {len(survey_status['answers'])}")
+    print(f"🔍 [DEBUG] 세션: {get_session_id()[:8]}..., 입력: '{user_input}', 현재 index: {survey_status['current_question_index']}, 답변 수: {len(survey_status['answers'])}")
 
     # 설문 진행 중인 경우
     if 0 <= survey_status["current_question_index"] < len(QUESTIONS):
@@ -242,7 +262,7 @@ def chat():  # 사용자 입력을 처리하고 적절한 응답 반환
                 survey_status["current_question_index"] += 1  # 상태 업데이트
         else:  # 설문 중 숫자가 아닌 입력을 받은 경우 (추가 질문)
             # 인덱스를 증가시키지 않고 현재 질문 유지
-            instruction_prompt = get_instruction_message()
+            instruction_prompt = get_instruction_message(survey_status["user_info"])
             try:
                 gpt_response = openai.ChatCompletion.create(
                     model="gpt-4o",  # GPT-4o 모델 사용
@@ -300,7 +320,7 @@ def chat():  # 사용자 입력을 처리하고 적절한 응답 반환
         }
         survey_status["current_question_index"] = 0  # QUESTIONS[0]에 대한 답변 대기
     else:  # 기타 상황 처리
-        instruction_prompt = get_instruction_message()  # 지침 메시지 생성
+        instruction_prompt = get_instruction_message(survey_status["user_info"])  # 지침 메시지 생성
         try:
             gpt_response = openai.ChatCompletion.create(
                 model="gpt-4o",  # GPT-4o 모델 사용
@@ -329,8 +349,8 @@ def chat():  # 사용자 입력을 처리하고 적절한 응답 반환
             print(f"GPT 호출 실패: {e}")
             bot_reply = {
                 "question": "죄송합니다. 입력을 처리하는 중 문제가 발생했습니다. 다시 시도해주세요.",
-                "button_texts": []
-            }
+                    "button_texts": []
+                }
 
     output_time = datetime.now(pytz.utc).astimezone(KST).strftime(
         '%Y-%m-%d %H:%M:%S')  # 응답 시간 기록
@@ -340,8 +360,8 @@ def chat():  # 사용자 입력을 처리하고 적절한 응답 반환
         "input_time": input_time,
         "output_time": output_time,
     }
-    chat_history["messages"].append(chat_record)  # 대화 기록에 추가
-    save_chat_history(chat_history)  # 대화 기록 저장
+    session_data["chat_history"]["messages"].append(chat_record)  # 대화 기록에 추가
+    save_chat_history(session_data["chat_history"], session_data["user_info"])  # 대화 기록 저장
 
     return jsonify(bot_reply)  # JSON 형태로 응답 반환
 
@@ -349,9 +369,8 @@ def chat():  # 사용자 입력을 처리하고 적절한 응답 반환
 # 대화 기록 조회 API
 @app.route('/history', methods=['GET'])  # GET 요청으로 대화 기록 반환
 def get_history():  # 대화 기록 반환
-    return jsonify(chat_history)  # JSON 형태로 대화 기록 반환
-
-
+    session_data = get_survey_status()
+    return jsonify(session_data["chat_history"])  # JSON 형태로 대화 기록 반환
 # 애플리케이션 실행
 if __name__ == '__main__':  # 스크립트가 직접 실행될 때
     # 환경 변수에서 포트 번호 가져오기 (기본값: 5000)
