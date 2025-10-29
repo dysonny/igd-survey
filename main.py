@@ -206,7 +206,7 @@ def chat():
     user_input = data.get("user_input", "").strip()
     input_time = datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
 
-    print(f"🔍 [DEBUG] 세션: {session.sid[:8]}..., 입력: '{user_input}', 현재 index: {survey_status['current_question_index']}")
+    print(f"🔍 [DEBUG] 입력: '{user_input}', 현재 index: {survey_status['current_question_index']}")
 
     # 설문 진행 중인 경우
     if 0 <= survey_status["current_question_index"] < len(QUESTIONS):
