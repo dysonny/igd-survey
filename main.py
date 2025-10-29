@@ -204,14 +204,14 @@ def chat():  # 사용자 입력을 처리하고 적절한 응답 반환
         if user_input.isdigit(
         ) and 1 <= int(user_input) <= 5:  # 입력이 1~5 사이의 숫자인 경우
             survey_status["answers"].append(user_input)  # 사용자 응답 저장
+            survey_status["current_question_index"] += 1  # 질문 인덱스를 먼저 증가
             current_index = survey_status[
-                "current_question_index"]  # 현재 질문 인덱스 가져오기
+                "current_question_index"]  # 다음 질문 인덱스 가져오기
 
-            if current_index + 1 < len(QUESTIONS):  # 다음 질문이 있는 경우
-                question = QUESTIONS[current_index + 1]  # 다음 질문 가져오기
-                survey_status["current_question_index"] += 1  # 질문 인덱스 업데이트
+            if current_index < len(QUESTIONS):  # 다음 질문이 있는 경우
+                question = QUESTIONS[current_index]  # 다음 질문 가져오기
 
-                if current_index + 1 < 9:  # 1~9번 질문에 대한 버튼 텍스트
+                if current_index < 9:  # 1~9번 질문에 대한 버튼 텍스트
                     button_texts = [
                         "1. 전혀 아니다", "2. 거의 아니다", "3. 때때로 그렇다", "4. 자주 그렇다",
                         "5. 매우 자주 그렇다"
@@ -235,12 +235,12 @@ def chat():  # 사용자 입력을 처리하고 적절한 응답 반환
                     "question": "설문이 완료되었습니다. 감사합니다!",
                     "button_texts": []
                 }
-                survey_status["current_question_index"] += 1  # 상태 업데이트
-        else:  # 설문 중 숫자가 아닌 입력을 받은 경우
+        else:  # 설문 중 숫자가 아닌 입력을 받은 경우 (추가 질문)
+            # 인덱스를 증가시키지 않고 현재 질문 유지
             instruction_prompt = get_instruction_message()  # 지침 메시지 생성
             try:
                 gpt_response = openai.ChatCompletion.create(
-                    model="gpt-4",  # GPT-4 모델 사용
+                    model="gpt-4o",  # GPT-4o 모델 사용
                     messages=[
                         {
                             "role": "system",
@@ -297,7 +297,7 @@ def chat():  # 사용자 입력을 처리하고 적절한 응답 반환
         instruction_prompt = get_instruction_message()  # 지침 메시지 생성
         try:
             gpt_response = openai.ChatCompletion.create(
-                model="gpt-4",  # GPT-4 모델 사용
+                model="gpt-4o",  # GPT-4o 모델 사용
                 messages=[
                     {
                         "role": "system",
