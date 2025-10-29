@@ -68,6 +68,8 @@ survey_status = {  # 현재 질문 인덱스와 사용자 응답 기록 관리
 }
 # 사용자 정보 저장 변수
 user_info = {}  # 사용자 이름, 생년월일, 성별 등 정보 저장
+# 대화 기록 저장 변수 초기화
+chat_history = {"user_info": {}, "messages": []}  # 대화 기록 초기화
 
 
 def save_chat_history(history):
