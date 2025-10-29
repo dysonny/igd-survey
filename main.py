@@ -199,8 +199,8 @@ def chat():  # 사용자 입력을 처리하고 적절한 응답 반환
     input_time = datetime.now(pytz.utc).astimezone(KST).strftime(
         '%Y-%m-%d %H:%M:%S')  # 입력 시간 기록
 
-    # 설문 진행 중인 경우 (인덱스 -1부터 시작, 0~28까지 진행)
-    if -1 <= survey_status["current_question_index"] < len(QUESTIONS):
+    # 설문 진행 중인 경우
+    if 0 <= survey_status["current_question_index"] < len(QUESTIONS):
         if user_input.isdigit(
         ) and 1 <= int(user_input) <= 5:  # 입력이 1~5 사이의 숫자인 경우
             survey_status["answers"].append(user_input)  # 사용자 응답 저장
@@ -282,8 +282,8 @@ def chat():  # 사용자 입력을 처리하고 적절한 응답 반환
             }
     # 설문 초기 상태 (사용자 정보 입력 후 첫 질문 표시)
     elif survey_status["current_question_index"] == -2:
-        # 첫 질문 표시하고 인덱스를 -1로 설정
-        # 다음 버튼 클릭 시 0으로 증가하여 QUESTIONS[0] (1번 질문)에 대한 답변 처리
+        # 첫 질문 (1/29) 표시하고 인덱스를 0으로 설정
+        # 다음 버튼 클릭 시 1로 증가하여 QUESTIONS[1] (2/29) 표시
         bot_reply = {
             "question":
             QUESTIONS[0],  # 첫 번째 질문 (1/29)
@@ -294,7 +294,7 @@ def chat():  # 사용자 입력을 처리하고 적절한 응답 반환
             "additional_message":
             "추가로 궁금한 점이 있다면 질문해주세요. 질문이 없다면 자신에게 맞는 번호를 선택해주세요.",
         }
-        survey_status["current_question_index"] = -1  # 인덱스를 -1로 설정 (다음 버튼 클릭 시 0이 됨)
+        survey_status["current_question_index"] = 0  # 인덱스를 0으로 설정
     else:  # 기타 상황 처리
         instruction_prompt = get_instruction_message()  # 지침 메시지 생성
         try:
