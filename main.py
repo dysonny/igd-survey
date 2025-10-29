@@ -1,27 +1,29 @@
-from flask import Flask, request, jsonify, send_from_directory, session  # Flask 웹 프레임워크 및 관련 모듈 가져오기
-from flask_cors import CORS  # CORS 지원을 위한 라이브러리
-import openai  # OpenAI API 사용을 위한 라이브러리
-import os  # 환경 변수와 파일 경로 관리를 위한 모듈
-import json  # JSON 데이터 처리 모듈
-import time  # 시간 관련 작업을 위한 모듈
-from datetime import datetime  # 날짜와 시간 처리를 위한 모듈
-import re  # 정규 표현식을 다루기 위한 모듈
-import pytz  # 시간대 변환을 위한 라이브러리
-from dotenv import load_dotenv  # .env 파일 로드를 위한 라이브러리
+from flask import Flask, request, jsonify, send_from_directory, session
+from flask_cors import CORS
+from flask_session import Session  # Flask-Session 임포트
+import openai
+import os
+import json
+import time
+from datetime import datetime
+import re
+import pytz
+from dotenv import load_dotenv
 
 # .env 파일에서 환경 변수 로드
 load_dotenv()
 
 # 대한민국(KST) 시간대 설정
 KST = pytz.timezone('Asia/Seoul')
-app = Flask(__name__, static_folder=".",
-            static_url_path="")  # 현재 디렉토리에서 정적 파일 제공
+app = Flask(__name__, static_folder=".", static_url_path="")
 
-# CORS 설정 - 모든 도메인에서 API 접근 허용 (credentials 지원)
+# CORS 설정
 CORS(app, supports_credentials=True)
 
-# 세션 비밀 키 설정 (보안을 위해 환경 변수 사용)
-app.secret_key = os.getenv("SECRET_KEY", "your-secret-key-change-this-in-production")
+# Flask-Session 설정
+app.config["SESSION_TYPE"] = "filesystem"  # 세션을 파일 시스템에 저장
+app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "super-secret-key-for-dev")
+Session(app)
 
 # OpenAI API 키 환경 변수에서 불러오기
 openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -64,44 +66,30 @@ QUESTIONS = [
     "29/29: 게임이 내 삶의 중요한 영역들에 부정적 영향을 미친다고 믿는다."
 ]
 
-# 사용자별 데이터를 저장하는 딕셔너리 (세션 ID를 키로 사용)
-user_sessions = {}
-
-
-def get_session_id():
-    """세션 ID 가져오기 또는 생성"""
-    if 'session_id' not in session:
-        import uuid
-        session['session_id'] = str(uuid.uuid4())
-    return session['session_id']
-
 
 def get_survey_status():
-    """현재 세션의 설문 상태 가져오기"""
-    session_id = get_session_id()
-    if session_id not in user_sessions:
-        user_sessions[session_id] = {
+    """현재 세션의 설문 상태 가져오기 또는 초기화"""
+    if 'survey_status' not in session:
+        session['survey_status'] = {
             "current_question_index": -2,
             "answers": [],
             "user_query_count": 0,
             "user_info": {},
             "chat_history": {"user_info": {}, "messages": []}
         }
-    return user_sessions[session_id]
+    return session['survey_status']
 
 
 def save_chat_history(history, user_info):
     # 사용자 이름과 생년월일 기반으로 파일명 생성
-    name = user_info.get("name", "unknown").replace(" ",
-                                                    "_")  # 사용자 이름 가져오고 공백 제거
-    dob = user_info.get("dob", "unknown")  # 대화 기록 저장 폴더 경로 생성
+    name = user_info.get("name", "unknown").replace(" ", "_")
+    dob = user_info.get("dob", "unknown")
 
     # 오늘 날짜를 기준으로 폴더 이름 생성
-    today = datetime.now(pytz.utc).astimezone(KST).strftime(
-        "%Y-%m-%d")  # 오늘 날짜 (KST)로 가져오기
-    folder_path = os.path.join("userinfo", today)  # 저장 경로 설정
+    today = datetime.now(KST).strftime("%Y-%m-%d")
+    folder_path = os.path.join("userinfo", today)
 
-    file_name = f"{name}_{dob}.json"  # 파일명 생성
+    file_name = f"{name}_{dob}.json"
 
     # 폴더가 없으면 생성
     if not os.path.exists(folder_path):
@@ -109,15 +97,15 @@ def save_chat_history(history, user_info):
 
     # 파일 저장
     file_path = os.path.join(folder_path, file_name)
-    with open(file_path, "w", encoding="utf-8") as file:  # 파일을 열고 JSON 기록 저장
-        json.dump(history, file, indent=4,
-                  ensure_ascii=False)  # JSON 형식으로 기록 저장
+    with open(file_path, "w", encoding="utf-8") as file:
+        json.dump(history, file, indent=4, ensure_ascii=False)
 
 
 # 초기화된 대화 기록 생성 함수
-def initialize_chat_history(session_data):  # 새로운 대화 기록 생성 및 초기화
-    session_data["chat_history"] = {"user_info": session_data["user_info"], "messages": []}  # 사용자 정보와 메시지 초기화
-    save_chat_history(session_data["chat_history"], session_data["user_info"])  # 대화 기록 저장
+def initialize_chat_history(session_data):
+    """세션 데이터에 대화 기록을 초기화합니다."""
+    session_data["chat_history"] = {"user_info": session_data["user_info"], "messages": []}
+    save_chat_history(session_data["chat_history"], session_data["user_info"])
 
 
 # OpenAI Assistant 응답 메시지 생성 함수
@@ -185,42 +173,40 @@ def index():  # index.html 파일을 반환
 
 
 # 설문 초기화 API
-@app.route('/reset', methods=['POST'])  # POST 요청으로 설문 상태 초기화
-def reset_survey():  # 설문 상태와 대화 기록 초기화
-    session_id = get_session_id()
-    if session_id in user_sessions:
-        del user_sessions[session_id]
-    session.clear()
+@app.route('/reset', methods=['POST'])
+def reset_survey():
+    """현재 세션의 설문 상태를 초기화합니다."""
+    session.pop('survey_status', None)
     return jsonify({"message": "설문 상태가 초기화되었습니다."})
 
 
 # 사용자 정보 저장 API
-@app.route('/user-info', methods=['POST'])  # POST 요청으로 사용자 정보 저장
-def save_user_info():  # 사용자 정보 저장 및 초기화된 대화 기록 생성
-    session_data = get_survey_status()
-    user_info = request.json  # 클라이언트로부터 JSON 데이터 가져오기
-    if not user_info.get("name") or not user_info.get(
-            "dob") or not user_info.get("gender") or not user_info.get(
-                "gameAddictionScore"):
-        return jsonify({"message": "모든 필드를 채워주세요."}), 400  # 필드가 부족하면 오류 응답 반환
-    session_data["user_info"] = user_info
-    initialize_chat_history(session_data)  # 대화 기록 초기화
-    return jsonify({"message": "User info saved successfully."})  # 성공 메시지 반환
+@app.route('/user-info', methods=['POST'])
+def save_user_info():
+    """사용자 정보를 세션에 저장하고 대화 기록을 초기화합니다."""
+    survey_status = get_survey_status()
+    user_info = request.json
+    if not all(user_info.get(key) for key in ["name", "dob", "gender", "gameAddictionScore"]):
+        return jsonify({"message": "모든 필드를 채워주세요."}), 400
+    
+    survey_status["user_info"] = user_info
+    survey_status["chat_history"] = {"user_info": user_info, "messages": []}
+    save_chat_history(survey_status["chat_history"], survey_status["user_info"])
+    
+    return jsonify({"message": "User info saved successfully."})
 
 
 # 설문 및 대화 처리 API
-@app.route('/chat', methods=['POST'])  # POST 요청으로 대화 처리
-def chat():  # 사용자 입력을 처리하고 적절한 응답 반환
-    session_data = get_survey_status()  # 세션별 상태 가져오기
-    survey_status = session_data  # 편의를 위한 alias
+@app.route('/chat', methods=['POST'])
+def chat():
+    """사용자 입력을 처리하고 세션 기반으로 응답을 반환합니다."""
+    survey_status = get_survey_status()
 
-    data = request.json  # 사용자 입력 데이터 가져오기
-    user_input = data.get("user_input", "").strip()  # 사용자 입력 문자열 가져오기
-    input_time = datetime.now(pytz.utc).astimezone(KST).strftime(
-        '%Y-%m-%d %H:%M:%S')  # 입력 시간 기록
-    
-    # 디버깅: 입력값과 현재 상태 출력
-    print(f"🔍 [DEBUG] 세션: {get_session_id()[:8]}..., 입력: '{user_input}', 현재 index: {survey_status['current_question_index']}, 답변 수: {len(survey_status['answers'])}")
+    data = request.json
+    user_input = data.get("user_input", "").strip()
+    input_time = datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
+
+    print(f"🔍 [DEBUG] 세션: {session.sid[:8]}..., 입력: '{user_input}', 현재 index: {survey_status['current_question_index']}")
 
     # 설문 진행 중인 경우
     if 0 <= survey_status["current_question_index"] < len(QUESTIONS):
@@ -229,13 +215,13 @@ def chat():  # 사용자 입력을 처리하고 적절한 응답 반환
             survey_status["answers"].append(user_input)
             current_index = survey_status["current_question_index"]
             
-            print(f"✅ [DEBUG] 답변 저장: '{user_input}', current_index: {current_index}")
+    print(f"✅ [DEBUG] 답변 저장: '{user_input}', current_index: {current_index}")
 
             if current_index + 1 < len(QUESTIONS):  # 다음 질문이 있는 경우
                 question = QUESTIONS[current_index + 1]  # 다음 질문 가져오기
                 survey_status["current_question_index"] += 1  # 인덱스 증가
                 
-                print(f"➡️  [DEBUG] 다음 질문으로 이동: index {current_index} → {survey_status['current_question_index']}, 질문: {question[:30]}...")
+    print(f"➡️  [DEBUG] 다음 질문으로 이동: index {current_index} → {survey_status['current_question_index']}, 질문: {question[:30]}...")
 
                 if current_index + 1 < 9:  # 1~9번 질문
                     button_texts = [
@@ -352,25 +338,25 @@ def chat():  # 사용자 입력을 처리하고 적절한 응답 반환
                     "button_texts": []
                 }
 
-    output_time = datetime.now(pytz.utc).astimezone(KST).strftime(
-        '%Y-%m-%d %H:%M:%S')  # 응답 시간 기록
-    chat_record = {  # 대화 기록 생성
+    input_time = datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
+    chat_record = {
         "user_input": user_input,
         "bot_reply": bot_reply,
         "input_time": input_time,
         "output_time": output_time,
     }
-    session_data["chat_history"]["messages"].append(chat_record)  # 대화 기록에 추가
-    save_chat_history(session_data["chat_history"], session_data["user_info"])  # 대화 기록 저장
+    survey_status["chat_history"]["messages"].append(chat_record)
+    save_chat_history(survey_status["chat_history"], survey_status["user_info"])
 
-    return jsonify(bot_reply)  # JSON 형태로 응답 반환
+    return jsonify(bot_reply)
 
 
 # 대화 기록 조회 API
-@app.route('/history', methods=['GET'])  # GET 요청으로 대화 기록 반환
-def get_history():  # 대화 기록 반환
-    session_data = get_survey_status()
-    return jsonify(session_data["chat_history"])  # JSON 형태로 대화 기록 반환
+@app.route('/history', methods=['GET'])
+def get_history():
+    """현재 세션의 대화 기록을 반환합니다."""
+    survey_status = get_survey_status()
+    return jsonify(survey_status.get("chat_history", {}))
 
 
 # 저장된 파일 목록 조회 API
@@ -414,11 +400,15 @@ def list_files():
 def download_file(filepath):
     """특정 JSON 파일 다운로드"""
     try:
-        file_path = os.path.join("userinfo", filepath)
-        if not os.path.exists(file_path):
+        # 경로 조작 방지
+        safe_path = os.path.abspath(os.path.join("userinfo", filepath))
+        if not safe_path.startswith(os.path.abspath("userinfo")):
+            return jsonify({"error": "Invalid path"}), 400
+            
+        if not os.path.exists(safe_path):
             return jsonify({"error": "File not found"}), 404
         
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(safe_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
         return jsonify(data)
