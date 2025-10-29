@@ -201,43 +201,42 @@ def chat():  # 사용자 입력을 처리하고 적절한 응답 반환
 
     # 설문 진행 중인 경우
     if 0 <= survey_status["current_question_index"] < len(QUESTIONS):
-        if user_input.isdigit(
-        ) and 1 <= int(user_input) <= 5:  # 입력이 1~5 사이의 숫자인 경우
-            survey_status["answers"].append(user_input)  # 사용자 응답 저장
-            survey_status["current_question_index"] += 1  # 질문 인덱스를 먼저 증가
-            current_index = survey_status[
-                "current_question_index"]  # 다음 질문 인덱스 가져오기
+        if user_input.isdigit() and 1 <= int(user_input) <= 5:  # 버튼 클릭 (1~5)
+            # 현재 질문(current_question_index)에 대한 답변 저장
+            survey_status["answers"].append(user_input)
+            
+            # 다음 질문으로 이동
+            survey_status["current_question_index"] += 1
+            next_index = survey_status["current_question_index"]
 
-            if current_index < len(QUESTIONS):  # 다음 질문이 있는 경우
-                question = QUESTIONS[current_index]  # 다음 질문 가져오기
+            if next_index < len(QUESTIONS):  # 다음 질문이 있으면
+                question = QUESTIONS[next_index]
 
-                if current_index < 9:  # 1~9번 질문에 대한 버튼 텍스트
+                if next_index < 9:  # 1~9번 질문
                     button_texts = [
                         "1. 전혀 아니다", "2. 거의 아니다", "3. 때때로 그렇다", "4. 자주 그렇다",
                         "5. 매우 자주 그렇다"
                     ]
-                else:  # 10번 이후 질문에 대한 버튼 텍스트
+                else:  # 10번 이후 질문
                     button_texts = [
                         "1. 전혀 그렇지 않다", "2. 그렇지 않다", "3. 보통이다", "4. 그렇다",
                         "5. 매우 그렇다"
                     ]
 
-                bot_reply = {  # 다음 질문과 버튼 텍스트 반환
-                    "question":
-                    question,
-                    "button_texts":
-                    button_texts,
+                bot_reply = {
+                    "question": question,
+                    "button_texts": button_texts,
                     "additional_message":
                     "추가로 궁금한 점이 있다면 질문해주세요. 질문이 없다면 자신에게 맞는 번호를 선택해주세요."
                 }
-            else:  # 마지막 질문 이후 설문 종료
+            else:  # 29번 질문까지 모두 완료
                 bot_reply = {
                     "question": "설문이 완료되었습니다. 감사합니다!",
                     "button_texts": []
                 }
-        else:  # 설문 중 숫자가 아닌 입력을 받은 경우 (추가 질문)
-            # 인덱스를 증가시키지 않고 현재 질문 유지
-            instruction_prompt = get_instruction_message()  # 지침 메시지 생성
+        else:  # 텍스트 입력 (추가 질문) - 인덱스 유지
+            # GPT에게 답변 요청, 인덱스는 변경하지 않음
+            instruction_prompt = get_instruction_message()
             try:
                 gpt_response = openai.ChatCompletion.create(
                     model="gpt-4o",  # GPT-4o 모델 사용
@@ -283,7 +282,6 @@ def chat():  # 사용자 입력을 처리하고 적절한 응답 반환
     # 설문 초기 상태 (사용자 정보 입력 후 첫 질문 표시)
     elif survey_status["current_question_index"] == -2:
         # 첫 질문 (1/29) 표시하고 인덱스를 0으로 설정
-        # 다음 버튼 클릭 시 1로 증가하여 QUESTIONS[1] (2/29) 표시
         bot_reply = {
             "question":
             QUESTIONS[0],  # 첫 번째 질문 (1/29)
@@ -294,7 +292,7 @@ def chat():  # 사용자 입력을 처리하고 적절한 응답 반환
             "additional_message":
             "추가로 궁금한 점이 있다면 질문해주세요. 질문이 없다면 자신에게 맞는 번호를 선택해주세요.",
         }
-        survey_status["current_question_index"] = 0  # 인덱스를 0으로 설정
+        survey_status["current_question_index"] = 0  # QUESTIONS[0]에 대한 답변 대기
     else:  # 기타 상황 처리
         instruction_prompt = get_instruction_message()  # 지침 메시지 생성
         try:
