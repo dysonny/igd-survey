@@ -193,6 +193,10 @@ def save_user_info():
     survey_status["chat_history"] = {"user_info": user_info, "messages": []}
     save_chat_history(survey_status["chat_history"], survey_status["user_info"])
     
+    # 세션 업데이트를 명시적으로 알림
+    session['survey_status'] = survey_status
+    session.modified = True
+    
     return jsonify({"message": "User info saved successfully."})
 
 
@@ -347,6 +351,10 @@ def chat():
     }
     survey_status["chat_history"]["messages"].append(chat_record)
     save_chat_history(survey_status["chat_history"], survey_status["user_info"])
+
+    # 세션 업데이트를 명시적으로 알림
+    session['survey_status'] = survey_status
+    session.modified = True
 
     return jsonify(bot_reply)
 
