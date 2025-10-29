@@ -439,6 +439,32 @@ def download_file(filepath):
         return jsonify({"error": str(e)}), 500
 
 
+# 특정 파일 삭제 API
+@app.route('/api/delete/<path:filepath>', methods=['DELETE'])
+def delete_file(filepath):
+    """특정 JSON 파일 삭제"""
+    try:
+        # 경로 조작 방지
+        safe_path = os.path.abspath(os.path.join("userinfo", filepath))
+        if not safe_path.startswith(os.path.abspath("userinfo")):
+            return jsonify({"error": "Invalid path"}), 400
+            
+        if not os.path.exists(safe_path):
+            return jsonify({"error": "File not found"}), 404
+        
+        # 파일 삭제
+        os.remove(safe_path)
+        
+        # 빈 폴더 정리 (폴더가 비어있으면 삭제)
+        folder_path = os.path.dirname(safe_path)
+        if os.path.exists(folder_path) and not os.listdir(folder_path):
+            os.rmdir(folder_path)
+        
+        return jsonify({"message": "File deleted successfully", "path": filepath})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # 특정 날짜의 파일 목록 조회 API
 @app.route('/api/files/<date>', methods=['GET'])
 def list_files_by_date(date):
