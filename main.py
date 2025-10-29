@@ -215,13 +215,13 @@ def chat():
             survey_status["answers"].append(user_input)
             current_index = survey_status["current_question_index"]
             
-    print(f"✅ [DEBUG] 답변 저장: '{user_input}', current_index: {current_index}")
+            print(f"✅ [DEBUG] 답변 저장: '{user_input}', current_index: {current_index}")
 
             if current_index + 1 < len(QUESTIONS):  # 다음 질문이 있는 경우
                 question = QUESTIONS[current_index + 1]  # 다음 질문 가져오기
                 survey_status["current_question_index"] += 1  # 인덱스 증가
                 
-    print(f"➡️  [DEBUG] 다음 질문으로 이동: index {current_index} → {survey_status['current_question_index']}, 질문: {question[:30]}...")
+                print(f"➡️  [DEBUG] 다음 질문으로 이동: index {current_index} → {survey_status['current_question_index']}, 질문: {question[:30]}...")
 
                 if current_index + 1 < 9:  # 1~9번 질문
                     button_texts = [
@@ -335,10 +335,10 @@ def chat():
             print(f"GPT 호출 실패: {e}")
             bot_reply = {
                 "question": "죄송합니다. 입력을 처리하는 중 문제가 발생했습니다. 다시 시도해주세요.",
-                    "button_texts": []
-                }
+                "button_texts": []
+            }
 
-    input_time = datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
+    output_time = datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
     chat_record = {
         "user_input": user_input,
         "bot_reply": bot_reply,
