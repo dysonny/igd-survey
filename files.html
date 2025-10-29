@@ -23,7 +23,7 @@
             margin: 0 auto;
             background: white;
             border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); 
             overflow: hidden;
         }
 
@@ -173,6 +173,17 @@
             background: #218838;
             transform: translateY(-2px);
             box-shadow: 0 5px 15px rgba(40, 167, 69, 0.3);
+        }
+
+        .btn-delete {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-delete:hover {
+            background: #c82333;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(220, 53, 69, 0.3);
         }
 
         .empty-state {
@@ -331,7 +342,7 @@
                     filesByDate[date].forEach(file => {
                         const sizeKB = (file.size / 1024).toFixed(2);
                         html += `
-                            <div class="file-card">
+                            <div class="file-card" data-filepath="${file.path}">
                                 <div class="file-info">
                                     <div class="file-name">📄 ${file.filename}</div>
                                     <div class="file-meta">
@@ -346,6 +357,9 @@
                                     <a href="/api/download/${file.path}" download class="btn btn-download">
                                         ⬇️ 다운로드
                                     </a>
+                                    <button class="btn btn-delete" onclick="deleteFile('${file.path}', '${file.filename}')">
+                                        🗑️ 삭제
+                                    </button>
                                 </div>
                             </div>
                         `;
@@ -366,6 +380,31 @@
                 `;
             } finally {
                 refreshBtn.classList.remove('spinning');
+            }
+        }
+
+        // 파일 삭제 함수
+        async function deleteFile(filepath, filename) {
+            if (!confirm(`정말로 "${filename}" 파일을 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/delete/${filepath}`, {
+                    method: 'DELETE'
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    alert(`✅ "${filename}" 파일이 삭제되었습니다.`);
+                    // 파일 목록 새로고침
+                    loadFiles();
+                } else {
+                    throw new Error(result.error || '파일 삭제 실패');
+                }
+            } catch (error) {
+                alert(`❌ 파일 삭제 중 오류가 발생했습니다: ${error.message}`);
             }
         }
 
